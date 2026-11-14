@@ -149,8 +149,8 @@ const member = memberMatch ? decodeURIComponent(memberMatch[1]) : '';
 const teamEl = document.getElementById('team');
 if (scope === 'perso') document.body.classList.add('perso');
 const host = location.host;
-// Paliers : lot 5. Liste vide tant que le serveur n'en envoie pas (en unités de la devise).
-let PALIERS = [];
+// Paliers : le serveur envoie chaque palier franchi une seule fois (msg.milestones), le widget ne
+// compare plus les totaux lui-même.
 
 // Display currency. The pot is counted in CAD; `taux` is what 1 unit of the
 // display currency is worth in CAD (reglages.txt, taux_devises). Milestones are
@@ -167,7 +167,6 @@ function setCurrency(code, rate) {
   }
   devise = code;
   taux = rate;
-  dernierTotal = null;          // a change of unit is not a milestone being crossed
   if (lastCents !== null) setTotal(lastCents);
 }
 const amountEl = document.getElementById('amount');
@@ -176,7 +175,6 @@ const queue = [];
 let badgeBusy = false;
 
 const boxEl = document.querySelector('.box');
-let dernierTotal = null;          // null tant qu'aucun total n'est connu
 
 function flashPalier() {
   boxEl.classList.remove('palier');
@@ -551,11 +549,6 @@ function setTotal(cents, donation = false) {
   } else {
     paint(amountEl, money.format(v));
   }
-  // Premier total reçu (ouverture, reconnexion) : mémorisé sans clignoter.
-  if (dernierTotal !== null && v > dernierTotal && PALIERS.some((p) => dernierTotal < p && v >= p)) {
-    flashPalier();
-  }
-  dernierTotal = v;
 }
 
 // Badges : un par don, en file (`queue`), montant en cents.
@@ -582,6 +575,20 @@ badgeEl.addEventListener('animationend', releaseBadge);
 // Un seul WebSocket, reconnexion pour toujours : le dernier chiffre reste affiché,
 // aucune erreur n'apparaît jamais à l'écran (statut "stale" compris).
 const seenBadges = new Set();   // un don n'est jamais montré deux fois, même renvoyé
+const seenMilestones = new Set();   // un palier ne clignote qu'une fois, même renvoyé
+let realCents = null;           // dernier total confirmé : un don de test ne le remplace jamais
+let testTimer = null;
+function handleTest(t) {
+  if (t.kind === 'milestone') return flashPalier();
+  if (t.kind === 'donation' && Number.isSafeInteger(t.amount_cents)) {
+    if (showBadge) { queue.push(t.amount_cents); pumpBadge(); }
+    if (realCents !== null) {
+      setTotal(realCents + t.amount_cents, true);   // roulette d'essai, annulée après 6 s
+      clearTimeout(testTimer);
+      testTimer = setTimeout(() => setTotal(realCents), 6000);
+    }
+  }
+}
 let delay = 500;
 let ping = null;
 function connect() {
@@ -598,6 +605,7 @@ function connect() {
   ws.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.test) return handleTest(msg.test);
     if (msg.currency) setCurrency(msg.currency, 1);
     const fresh = (msg.new_donations || []).filter((d) => !seenBadges.has(d.id));
     fresh.forEach((d) => seenBadges.add(d.id));
@@ -607,7 +615,11 @@ function connect() {
         teamEl.textContent = 'ÉQUIPE ' + money.format(msg.team_total_cents / 100 / taux);
       }
     }
+    if (Number.isSafeInteger(msg.total_cents)) realCents = msg.total_cents;
     setTotal(msg.total_cents, fresh.length > 0);
+    const flashes = (msg.milestones || []).filter((m) => !seenMilestones.has(m.id));
+    flashes.forEach((m) => seenMilestones.add(m.id));
+    if (flashes.length > 0) flashPalier();
     if (showBadge) fresh.forEach((d) => { queue.push(d.amount_cents); pumpBadge(); });
   };
   ws.onclose = () => {
