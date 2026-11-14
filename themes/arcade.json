@@ -1,0 +1,21 @@
+{
+  "id": "arcade",
+  "nom": "Arcade",
+  "style": {
+    "neon": "#ff9f1c",
+    "lueur_texte": "#ffb347",
+    "fond": "#1a0f00",
+    "titre_couleur": "#ffd9a0",
+    "montant_couleur": "#fff4d6",
+    "badge_fond": "#39ff88",
+    "badge_texte": "#062414",
+    "flash": "#39ff88",
+    "intensite": 80,
+    "opacite_fond": 85,
+    "contour": 4,
+    "arrondi": 6,
+    "police": "arcade",
+    "taille_montant": 44,
+    "taille_titre": 20
+  }
+}

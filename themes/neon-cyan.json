@@ -1,0 +1,21 @@
+{
+  "id": "neon-cyan",
+  "nom": "Néon cyan",
+  "style": {
+    "neon": "#00e5ff",
+    "lueur_texte": "#22d3ee",
+    "fond": "#062630",
+    "titre_couleur": "#b8f6ff",
+    "montant_couleur": "#ffffff",
+    "badge_fond": "#ffd23f",
+    "badge_texte": "#1a1a1a",
+    "flash": "#ffd23f",
+    "intensite": 100,
+    "opacite_fond": 70,
+    "contour": 3,
+    "arrondi": 26,
+    "police": "pixel_gaming",
+    "taille_montant": 38,
+    "taille_titre": 13
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "pixel",
+  "nom": "Pixel",
+  "style": {
+    "neon": "#39ff88",
+    "lueur_texte": "#34d399",
+    "fond": "#062414",
+    "titre_couleur": "#c6ffe0",
+    "montant_couleur": "#ffffff",
+    "badge_fond": "#ffd23f",
+    "badge_texte": "#1a1a1a",
+    "flash": "#ffd23f",
+    "intensite": 60,
+    "opacite_fond": 80,
+    "contour": 4,
+    "arrondi": 0,
+    "police": "pixel",
+    "taille_montant": 30,
+    "taille_titre": 11
+  }
+}

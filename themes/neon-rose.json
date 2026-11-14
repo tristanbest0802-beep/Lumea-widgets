@@ -1,0 +1,21 @@
+{
+  "id": "neon-rose",
+  "nom": "Néon rose",
+  "style": {
+    "neon": "#ff2bd6",
+    "lueur_texte": "#ff5ce1",
+    "fond": "#2b0a26",
+    "titre_couleur": "#ffc2f1",
+    "montant_couleur": "#ffffff",
+    "badge_fond": "#ffd23f",
+    "badge_texte": "#1a1a1a",
+    "flash": "#ffd23f",
+    "intensite": 100,
+    "opacite_fond": 70,
+    "contour": 3,
+    "arrondi": 26,
+    "police": "jersey",
+    "taille_montant": 44,
+    "taille_titre": 16
+  }
+}

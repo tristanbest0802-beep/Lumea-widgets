@@ -1,0 +1,22 @@
+{
+  "id": "lumea",
+  "nom": "Lumea",
+  "style": {
+    "neon": "#1f5fcc",
+    "lueur_texte": "#5b8def",
+    "fond": "#0b1b3a",
+    "titre_couleur": "#b8ccf0",
+    "montant_couleur": "#ffffff",
+    "badge_fond": "#ffc83d",
+    "badge_texte": "#0b1b3a",
+    "flash": "#ffc83d",
+    "intensite": 30,
+    "opacite_fond": 92,
+    "opacite": 100,
+    "contour": 3,
+    "arrondi": 20,
+    "police": "hanken",
+    "taille_montant": 42,
+    "taille_titre": 13
+  }
+}

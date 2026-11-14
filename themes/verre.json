@@ -1,0 +1,21 @@
+{
+  "id": "verre",
+  "nom": "Verre transparent",
+  "style": {
+    "neon": "#ffffff",
+    "lueur_texte": "#ffffff",
+    "fond": "#ffffff",
+    "titre_couleur": "#ffffff",
+    "montant_couleur": "#ffffff",
+    "badge_fond": "#ffd23f",
+    "badge_texte": "#1a1a1a",
+    "flash": "#ffd23f",
+    "intensite": 35,
+    "opacite_fond": 12,
+    "contour": 1,
+    "arrondi": 20,
+    "police": "hanken",
+    "taille_montant": 42,
+    "taille_titre": 13
+  }
+}

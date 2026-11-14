@@ -1,10 +1,8 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Lumea : total</title>
+<link rel="stylesheet" href="/widgets/fonts/fonts.css">  <!-- polices livrées : aucun appel à internet -->
 <style>
-  /* Police livrée avec le widget : aucun appel à internet au runtime. */
-  @font-face { font-family: 'Press Start 2P'; font-weight: 400; font-display: block;
-               src: url('/widgets/fonts/press-start-2p-latin-400.woff2') format('woff2'); }
   html, body {
     margin: 0; height: 100%;
     background: transparent;   /* OBS: seule la boite est visible, aucun fond autour */
@@ -18,24 +16,24 @@
   /* Look of the widget. These defaults are the original look; the style chosen in
      the admin (Widgets OBS > Personnaliser) overrides them, see applyStyle(). */
   :root {
-    --neon: #b026ff;
-    --glow: 0 0 15px rgba(176, 38, 255, 0.8), inset 0 0 10px rgba(176, 38, 255, 0.5);
-    --bg: rgba(41, 14, 66, 0.70);
+    --neon: #1f5fcc;
+    --glow: 0 0 5px rgba(31, 95, 204, 0.24), inset 0 0 3px rgba(31, 95, 204, 0.15);
+    --bg: rgba(11, 27, 58, 0.92);
     --border-w: 3px;
-    --radius: 26px;
+    --radius: 20px;
     --opacity: 1;
-    --font: 'Press Start 2P', monospace;
-    --title-size: 12px;
-    --title-color: #d9c7ff;
-    --title-glow: 0 0 6px #a06bff, 0 0 14px #a06bff;
-    --amount-size: 34px;
+    --font: 'Hanken Grotesk', sans-serif;
+    --title-size: 13px;
+    --title-color: #b8ccf0;
+    --title-glow: 0 0 2px #5b8def, 0 0 4px #5b8def;
+    --amount-size: 42px;
     --amount-color: #ffffff;
-    --amount-glow: 0 0 8px #a06bff, 0 0 18px #a06bff, 0 0 32px rgba(160, 107, 255, .7);
-    --badge-bg: #ffd23f;
-    --badge-fg: #1a1a1a;
-    --flash: #ffd23f;
-    --flash-glow: 0 0 28px rgba(255, 210, 63, 0.95), 0 0 60px rgba(255, 210, 63, 0.55),
-                  inset 0 0 18px rgba(255, 210, 63, 0.6);
+    --amount-glow: 0 0 2px #5b8def, 0 0 5px #5b8def, 0 0 10px rgba(91, 141, 239, .7);
+    --badge-bg: #ffc83d;
+    --badge-fg: #0b1b3a;
+    --flash: #ffc83d;
+    --flash-glow: 0 0 28px rgba(255, 200, 61, 0.95), 0 0 60px rgba(255, 200, 61, 0.55),
+                  inset 0 0 18px rgba(255, 200, 61, 0.6);
   }
   .box {
     position: relative;
@@ -122,6 +120,16 @@
     50% { border-color: var(--flash); box-shadow: var(--flash-glow); }
   }
 
+  /* Animations réduites (option du style ou réglage du système) : le badge fond sans rebondir,
+     le cadre clignote deux fois, la roulette est coupée (voir rouleau dans applyStyle). */
+  .reduit .box.palier { animation-iteration-count: 2; }
+  .reduit .badge.pop { animation-name: badgeFade; }
+  @keyframes badgeFade { 0% { opacity: 0; } 10%, 85% { opacity: 1; } 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .box.palier { animation-iteration-count: 2; }
+    .badge.pop { animation-name: badgeFade; }
+  }
+
   .badge.pop { animation: badgePop 4.5s ease forwards; }
   @keyframes badgePop {
     0%   { opacity: 0; transform: scale(.2) rotate(-20deg); }
@@ -156,7 +164,7 @@ const host = location.host;
 // display currency is worth in CAD (reglages.txt, taux_devises). Milestones are
 // read in the display currency: 500 on a EUR widget means 500 euros.
 let money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD' });
-let devise = 'CAD', taux = 1, lastCents = null;
+let devise = 'CAD', taux = 1, lastCents = null, styleCurrency = '';
 function setCurrency(code, rate) {
   if (!code || !(rate > 0)) { code = 'CAD'; rate = 1; }     // no rate yet: stay in CAD
   if (code === devise && rate === taux) return;
@@ -521,16 +529,22 @@ function applyStyle(st) {
                       + `inset 0 0 18px ${rgba(st.flash, 0.6)}`);
   titleEl.style.display = st.afficher_titre ? '' : 'none';
   showBadge = st.afficher_badge;
-  rouleau = !!st.animation_rouleau;
+  const reduit = !!st.animations_reduites || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.documentElement.classList.toggle('reduit', reduit);
+  rouleau = !!st.animation_rouleau && !reduit;      // the amount then just changes: always the true total
+  if (scope === 'global' && st.titre) setTitle(st.titre);
   rollSign = st.rouleau_sens === 'haut' ? -1 : 1;
   rollWindow = !!st.rouleau_apparent;
   rollNeighbours = rouleau && !!st.rouleau_voisins && !rollWindow;
   rollSingle = !!st.rouleau_unique;
   amountEl.classList.toggle('avec-voisins', rollNeighbours);
-  setCurrency(st.devise, st.taux);
+  styleCurrency = st.devise;       // "" = the campaign's own, sent with the state
+  if (st.devise) setCurrency(st.devise, 1);
   pixelSize = st.police_pixel || 0;
   pixelFont = st.police_css;
   repaintAll();                 // sizes, colours or font changed
+  // the font file loads on first use: redraw (the square-drawn text needs it) once it is there
+  if (document.fonts) document.fonts.load(`700 20px ${st.police_css}`).then(repaintAll, () => {});
 }
 
 function setTitle(t) {
@@ -606,7 +620,9 @@ function connect() {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
     if (msg.test) return handleTest(msg.test);
-    if (msg.currency) setCurrency(msg.currency, 1);
+    if (msg.style) applyStyle(msg.style);       // first message, then each change made in Lumea
+    if (!('status' in msg)) return;             // a style alone carries no total
+    if (msg.currency && !styleCurrency) setCurrency(msg.currency, 1);
     const fresh = (msg.new_donations || []).filter((d) => !seenBadges.has(d.id));
     fresh.forEach((d) => seenBadges.add(d.id));
     if (scope === 'perso') {

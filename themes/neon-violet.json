@@ -1,0 +1,21 @@
+{
+  "id": "neon-violet",
+  "nom": "Néon violet",
+  "style": {
+    "neon": "#b026ff",
+    "lueur_texte": "#a06bff",
+    "fond": "#290e42",
+    "titre_couleur": "#d9c7ff",
+    "montant_couleur": "#ffffff",
+    "badge_fond": "#ffd23f",
+    "badge_texte": "#1a1a1a",
+    "flash": "#ffd23f",
+    "intensite": 100,
+    "opacite_fond": 70,
+    "contour": 3,
+    "arrondi": 26,
+    "police": "pixel",
+    "taille_montant": 34,
+    "taille_titre": 12
+  }
+}

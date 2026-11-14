@@ -1,0 +1,21 @@
+{
+  "id": "sobre",
+  "nom": "Sobre sombre",
+  "style": {
+    "neon": "#3f3f46",
+    "lueur_texte": "#000000",
+    "fond": "#0b0b0f",
+    "titre_couleur": "#a1a1aa",
+    "montant_couleur": "#ffffff",
+    "badge_fond": "#fafafa",
+    "badge_texte": "#0b0b0f",
+    "flash": "#fafafa",
+    "intensite": 0,
+    "opacite_fond": 88,
+    "contour": 1,
+    "arrondi": 14,
+    "police": "hanken",
+    "taille_montant": 42,
+    "taille_titre": 13
+  }
+}

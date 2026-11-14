@@ -1,0 +1,17 @@
+/* Polices des widgets, toutes livrées ici (licence OFL : fichiers OFL-*.txt). Aucun appel à internet. */
+@font-face { font-family: 'Hanken Grotesk'; font-weight: 100 900; font-display: block;
+             src: url('/widgets/fonts/hanken-grotesk-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Press Start 2P'; font-weight: 400; font-display: block;
+             src: url('/widgets/fonts/press-start-2p-latin-400.woff2') format('woff2'); }
+@font-face { font-family: 'Chakra Petch'; font-weight: 700; font-display: block;
+             src: url('/widgets/fonts/chakra-petch-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Jersey 20'; font-weight: 400; font-display: block;
+             src: url('/widgets/fonts/jersey-20-latin.woff2') format('woff2'); }
+@font-face { font-family: 'DotGothic16'; font-weight: 400; font-display: block;
+             src: url('/widgets/fonts/dotgothic16-latin.woff2') format('woff2'); }
+@font-face { font-family: 'VT323'; font-weight: 400; font-display: block;
+             src: url('/widgets/fonts/vt323-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Fredoka'; font-weight: 300 700; font-display: block;
+             src: url('/widgets/fonts/fredoka-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Bebas Neue'; font-weight: 400; font-display: block;
+             src: url('/widgets/fonts/bebas-neue-latin.woff2') format('woff2'); }
