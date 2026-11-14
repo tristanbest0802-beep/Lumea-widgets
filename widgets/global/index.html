@@ -57,6 +57,13 @@
     max-width: 440px; margin-left: auto; margin-right: auto;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* page perso seulement : le total de l'équipe, en petit sous le total du streamer */
+  .team {
+    display: none; margin-top: 16px;
+    font-family: var(--font); font-size: 10px; letter-spacing: 2px;
+    color: var(--title-color); text-shadow: var(--title-glow); white-space: nowrap;
+  }
+  .perso .team { display: block; }
   .amount {
     font-family: var(--font);
     font-size: var(--amount-size);
@@ -130,11 +137,17 @@
   <div class="title">CAGNOTTE GLOBALE</div>
   <div class="amount" id="amount">0,00 $</div>
   <div class="badge" id="badge"></div>
+  <div class="team" id="team"></div>
 </div>
 
 <script>
 // Le widget ne parle qu'à Lumea, sur la machine : /widget/global ou /widget/perso.
 const scope = location.pathname.includes('/perso') ? 'perso' : 'global';
+// /widget/perso/<id du membre> : le serveur ne renvoie que les dons de ce membre.
+const memberMatch = location.pathname.match(/\/perso\/([^/]+)/);
+const member = memberMatch ? decodeURIComponent(memberMatch[1]) : '';
+const teamEl = document.getElementById('team');
+if (scope === 'perso') document.body.classList.add('perso');
 const host = location.host;
 // Paliers : lot 5. Liste vide tant que le serveur n'en envoie pas (en unités de la devise).
 let PALIERS = [];
@@ -573,7 +586,7 @@ let delay = 500;
 let ping = null;
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${host}/ws?scope=${scope}`);
+  const ws = new WebSocket(`${proto}://${host}/ws?scope=${scope}${member ? '&member=' + encodeURIComponent(member) : ''}`);
   ws.onopen = () => {
     delay = 500;
     // heartbeat : un socket tué par un redémarrage est détecté en quelques secondes.
@@ -588,6 +601,12 @@ function connect() {
     if (msg.currency) setCurrency(msg.currency, 1);
     const fresh = (msg.new_donations || []).filter((d) => !seenBadges.has(d.id));
     fresh.forEach((d) => seenBadges.add(d.id));
+    if (scope === 'perso') {
+      if (msg.name) setTitle(msg.name);
+      if (Number.isSafeInteger(msg.team_total_cents)) {
+        teamEl.textContent = 'ÉQUIPE ' + money.format(msg.team_total_cents / 100 / taux);
+      }
+    }
     setTotal(msg.total_cents, fresh.length > 0);
     if (showBadge) fresh.forEach((d) => { queue.push(d.amount_cents); pumpBadge(); });
   };
