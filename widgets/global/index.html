@@ -1,0 +1,603 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Lumea : total</title>
+<style>
+  /* Police livrée avec le widget : aucun appel à internet au runtime. */
+  @font-face { font-family: 'Press Start 2P'; font-weight: 400; font-display: block;
+               src: url('/widgets/fonts/press-start-2p-latin-400.woff2') format('woff2'); }
+  html, body {
+    margin: 0; height: 100%;
+    background: transparent;   /* OBS: seule la boite est visible, aucun fond autour */
+    overflow: hidden;
+    /* the XP badge sticks out of the box: keep it inside the OBS canvas.
+       The 760 x 420 source leaves 80px around a 600 x 260 widget: the palier flash glow
+       (blur 60px) fades out before the edge, so the source limit never shows. */
+    padding: 34px 40px; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* Look of the widget. These defaults are the original look; the style chosen in
+     the admin (Widgets OBS > Personnaliser) overrides them, see applyStyle(). */
+  :root {
+    --neon: #b026ff;
+    --glow: 0 0 15px rgba(176, 38, 255, 0.8), inset 0 0 10px rgba(176, 38, 255, 0.5);
+    --bg: rgba(41, 14, 66, 0.70);
+    --border-w: 3px;
+    --radius: 26px;
+    --opacity: 1;
+    --font: 'Press Start 2P', monospace;
+    --title-size: 12px;
+    --title-color: #d9c7ff;
+    --title-glow: 0 0 6px #a06bff, 0 0 14px #a06bff;
+    --amount-size: 34px;
+    --amount-color: #ffffff;
+    --amount-glow: 0 0 8px #a06bff, 0 0 18px #a06bff, 0 0 32px rgba(160, 107, 255, .7);
+    --badge-bg: #ffd23f;
+    --badge-fg: #1a1a1a;
+    --flash: #ffd23f;
+    --flash-glow: 0 0 28px rgba(255, 210, 63, 0.95), 0 0 60px rgba(255, 210, 63, 0.55),
+                  inset 0 0 18px rgba(255, 210, 63, 0.6);
+  }
+  .box {
+    position: relative;
+    background: var(--bg);
+    border: var(--border-w) solid var(--neon);
+    border-radius: var(--radius);
+    padding: 26px 48px;
+    text-align: center;
+    box-shadow: var(--glow);
+    opacity: var(--opacity);
+  }
+  .title {
+    font-family: var(--font);
+    font-size: var(--title-size); letter-spacing: 3px;
+    color: var(--title-color);
+    text-shadow: var(--title-glow);
+    margin-bottom: 20px;
+    /* a long streamer name must never push the box out of the OBS source */
+    max-width: 440px; margin-left: auto; margin-right: auto;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .amount {
+    font-family: var(--font);
+    font-size: var(--amount-size);
+    color: var(--amount-color);
+    text-shadow: var(--amount-glow);
+    white-space: nowrap;
+  }
+  /* Roulette option: the amount is a drum of whole numbers, read in rows: the row above
+     the middle one is the next amount, the row below the previous one.
+     Radius = 1.3em / (2 tan 18deg) = 2em. The padding keeps the glow inside the mask;
+     negative margins keep the box size unchanged. --angle is set at every frame. */
+  .roll { display: inline-flex; align-items: center; vertical-align: top;
+          padding: 1em 40px; margin: -1em -40px;
+          /* always on: switching a mask on when the drum starts would cut the glow at once */
+          -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+          mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); }
+  /* "chiffre apparent": a window one row high, the digits pass through it and nothing shows around */
+  .roll.apparent { -webkit-mask-image: linear-gradient(transparent 27%, #000 33%, #000 67%, transparent 73%);
+                   mask-image: linear-gradient(transparent 27%, #000 33%, #000 67%, transparent 73%); }
+  /* rows kept at rest: they need their own room, between the title and the frame */
+  .amount.avec-voisins { margin: .95em 0; }
+  .cell { display: inline-block; position: relative; flex: none; width: 0; height: 1.3em; line-height: 1.3em;
+          white-space: pre; perspective: 8em; transition: width .3s ease; }
+  .roll.neuf .cell { transition: none; }    /* a redraw is not a new column opening */
+  .drum { position: absolute; inset: 0; transform-style: preserve-3d; will-change: transform;
+          transform: translateZ(-2em) rotateX(calc(var(--angle, 0) * 1deg)); }
+  .cell.fixe .drum { transform: translateZ(-2em); }
+  /* right-aligned: a row with one more digit (999 under 1 000) spills to the left */
+  .face { position: absolute; inset: 0; display: flex; justify-content: center; backface-visibility: hidden; }
+  .cell.vide .face { justify-content: flex-end; }
+  /* Rows around the middle one fade in and out: appearing at once, their neon would flash. */
+  .face { opacity: 0; transition: opacity .25s ease; }
+  .face.cur, .roll.spin:not(.seul) .cell:not(.fixe) .face, .cell.tourne .face,
+  .roll.voisins .cell:not(.fixe) .face.voisin { opacity: 1; }
+  .badge {
+    position: absolute; top: -22px; right: -30px;
+    background: var(--badge-bg);
+    border: 4px solid var(--badge-bg);
+    border-radius: 999px;
+    padding: 9px 15px;
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--badge-fg);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* "Pixel" fonts: the text is a canvas drawn in small squares, glowing like text */
+  .title canvas, .amount canvas, .badge canvas { display: block; margin: 0 auto; }
+  .title canvas { filter: var(--title-glow-f, none); }
+  .amount canvas { filter: var(--amount-glow-f, none); }
+  /* Palier atteint : le cadre clignote (en jaune par defaut). */
+  .box.palier { animation: palierFlash 0.9s ease-in-out 7; }
+  @keyframes palierFlash {
+    0%, 100% { border-color: var(--neon); box-shadow: var(--glow); }
+    50% { border-color: var(--flash); box-shadow: var(--flash-glow); }
+  }
+
+  .badge.pop { animation: badgePop 4.5s ease forwards; }
+  @keyframes badgePop {
+    0%   { opacity: 0; transform: scale(.2) rotate(-20deg); }
+    8%   { opacity: 1; transform: scale(1.35) rotate(10deg); }
+    14%  { transform: scale(.9) rotate(-4deg); }
+    20%  { transform: scale(1) rotate(0deg); }
+    82%  { opacity: 1; transform: scale(1) rotate(0deg); }
+    100% { opacity: 0; transform: scale(1) rotate(0deg); }
+  }
+</style>
+
+<div class="box">
+  <div class="title">CAGNOTTE GLOBALE</div>
+  <div class="amount" id="amount">0,00 $</div>
+  <div class="badge" id="badge"></div>
+</div>
+
+<script>
+// Le widget ne parle qu'à Lumea, sur la machine : /widget/global ou /widget/perso.
+const scope = location.pathname.includes('/perso') ? 'perso' : 'global';
+const host = location.host;
+// Paliers : lot 5. Liste vide tant que le serveur n'en envoie pas (en unités de la devise).
+let PALIERS = [];
+
+// Display currency. The pot is counted in CAD; `taux` is what 1 unit of the
+// display currency is worth in CAD (reglages.txt, taux_devises). Milestones are
+// read in the display currency: 500 on a EUR widget means 500 euros.
+let money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD' });
+let devise = 'CAD', taux = 1, lastCents = null;
+function setCurrency(code, rate) {
+  if (!code || !(rate > 0)) { code = 'CAD'; rate = 1; }     // no rate yet: stay in CAD
+  if (code === devise && rate === taux) return;
+  try {
+    money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: code });
+  } catch {                                                  // code unknown to this browser
+    return setCurrency('CAD', 1);
+  }
+  devise = code;
+  taux = rate;
+  dernierTotal = null;          // a change of unit is not a milestone being crossed
+  if (lastCents !== null) setTotal(lastCents);
+}
+const amountEl = document.getElementById('amount');
+const badgeEl = document.getElementById('badge');
+const queue = [];
+let badgeBusy = false;
+
+const boxEl = document.querySelector('.box');
+let dernierTotal = null;          // null tant qu'aucun total n'est connu
+
+function flashPalier() {
+  boxEl.classList.remove('palier');
+  void boxEl.offsetWidth;         // relance l'animation si elle tourne deja
+  boxEl.classList.add('palier');
+}
+boxEl.addEventListener('animationend', (e) => {
+  if (e.animationName === 'palierFlash') boxEl.classList.remove('palier');
+});
+
+// ---- look: style sent by the server (or, in the admin preview, by the editor) ----
+const titleEl = document.querySelector('.title');
+let showBadge = true;
+let lastTitre = null;
+
+const rgb = (h) => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const rgba = (h, a) => `rgba(${rgb(h).join(',')},${Math.max(0, Math.min(1, a)).toFixed(2)})`;
+// ---- text: plain text, or drawn on a grid of small squares ("pixel" fonts) ----
+// A smooth font drawn at 1/n size then enlarged square by square: every glyph,
+// any currency symbol included, gets the same pixel-art look, with fine squares.
+let pixelSize = 0;              // 0 = the font draws itself; n = squares of n px
+let pixelFont = null;
+const texts = new Map();        // element -> its text, to redraw after a style change
+
+function pixelCanvas(text, cs) {
+  const size = parseFloat(cs.fontSize);
+  // a small title keeps at least 9 squares of height, else it is unreadable
+  const px = Math.max(1, Math.min(pixelSize, Math.floor(size / 9)));
+  const fs = Math.max(4, Math.round(size / px));
+  const gap = (parseFloat(cs.letterSpacing) || 0) / px;
+  const font = `700 ${fs}px ${pixelFont}, 'Segoe UI Symbol', 'Segoe UI', sans-serif`;
+  const small = document.createElement('canvas');
+  const c = small.getContext('2d');
+  c.font = font;
+  const chars = [...text];
+  const widths = chars.map((ch) => c.measureText(ch).width);
+  small.width = Math.ceil(widths.reduce((a, b) => a + b, 0) + gap * Math.max(0, chars.length - 1)) + 2;
+  small.height = Math.ceil(fs * 1.3);
+  c.font = font;                // resizing a canvas resets its context
+  c.textBaseline = 'middle';
+  let x = 1;
+  chars.forEach((ch, i) => { c.fillText(ch, x, small.height / 2 + 1); x += widths[i] + gap; });
+  const img = c.getImageData(0, 0, small.width, small.height);
+  for (let i = 3; i < img.data.length; i += 4) img.data[i] = img.data[i] >= 128 ? 255 : 0;  // hard-edged squares
+  c.putImageData(img, 0, 0);
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = cs.color;
+  c.fillRect(0, 0, small.width, small.height);
+  const out = document.createElement('canvas');
+  out.width = small.width * px;
+  out.height = small.height * px;
+  const o = out.getContext('2d');
+  o.imageSmoothingEnabled = false;
+  o.drawImage(small, 0, 0, out.width, out.height);
+  return out;
+}
+
+function paint(el, text) {
+  texts.set(el, text);
+  if (el === amountEl && rouleau) return drawRoll(text);
+  drawText(el, text);
+}
+
+function drawText(el, text) {
+  // the title clips overflow for its CSS ellipsis; that would cut the canvas glow
+  el.style.overflow = pixelSize ? 'visible' : '';
+  if (!pixelSize) { el.textContent = text; return; }
+  const cs = getComputedStyle(el);
+  const max = el === titleEl ? 440 : Infinity;    // same limit as the CSS ellipsis
+  let shown = text;
+  let canvas = pixelCanvas(shown, cs);
+  while (canvas.width > max && shown.length > 2) {
+    shown = `${shown.replace(/…$/, '').slice(0, -1)}…`;
+    canvas = pixelCanvas(shown, cs);
+  }
+  el.replaceChildren(canvas);
+}
+
+function repaintAll() {
+  for (const [el, text] of texts) paint(el, text);
+}
+
+// ---- roulette option: the whole amount turns in rows of consecutive amounts ----
+let rouleau = false;
+let rollSign = 1;               // 1: rows move down, the next amount comes from above; -1: the opposite
+let rollNeighbours = false;
+let rollWindow = false;         // "chiffre apparent": no row visible above or below the middle one
+let rollSingle = false;         // "chiffre unique": each digit turns on its own, only if it changes
+let rollCells = [];             // from right to left: { el, faces }
+let charWidths = new Map();
+let rollFrame = null;
+let lastFrame = 0;
+// `turn` is the position of the drum, counted in rows; it lands on a whole number.
+// Each whole value of it shows one amount: see amountAt().
+let turn = 0, turnSpeed = 0, turnEnd = 0;
+let countFrom = 0, countFromTurn = 0, countTo = 0;
+let shownAmount = 0;
+
+const ROWS = [-1, 0, 1, 2];     // offset of each row from the middle one; 2 enters from the top
+const MAX_ROWS = 16;            // rows turned for one donation, whatever its size
+const LAST_ROWS = 8;            // the end of the count goes one by one
+const SPRING = 5;
+
+const isDigit = (ch) => ch >= '0' && ch <= '9';
+const digitsOf = (text) => Number([...text].filter(isDigit).join('')) || 0;
+
+// 1111 -> its characters. Below zero there is nothing to show.
+function rowChars(n) {
+  if (n < 0) return [];
+  const decimals = money.resolvedOptions().maximumFractionDigits;
+  return [...money.format(n / 10 ** decimals)].reverse();
+}
+
+function charWidth(ch, roll) {
+  if (!ch) return 0;
+  const key = isDigit(ch) ? '0' : ch;
+  if (!charWidths.has(key)) {
+    const ruler = Object.assign(document.createElement('span'), { className: 'cell' });
+    ruler.style.width = 'auto';
+    roll.append(ruler);
+    // every digit gets the width of the widest one, so the amount does not shake
+    const widths = (isDigit(ch) ? '0123456789' : ch).split('').map((c) => {
+      drawText(ruler, c);
+      return ruler.getBoundingClientRect().width;
+    });
+    ruler.remove();
+    charWidths.set(key, Math.max(...widths));
+  }
+  return charWidths.get(key);
+}
+
+// A "pixel" glyph is costly to draw, so each face keeps those it has already drawn.
+function drawFace(face, ch) {
+  if (face.dataset.ch === ch) return;
+  face.dataset.ch = ch;
+  if (!ch) { face.replaceChildren(); return; }
+  if (!pixelSize) { face.textContent = ch; return; }
+  face.drawn ??= {};
+  if (face.drawn[ch]) { face.replaceChildren(face.drawn[ch]); return; }
+  drawText(face, ch);
+  face.drawn[ch] = face.firstChild;
+}
+
+function makeCell(roll) {
+  const el = Object.assign(document.createElement('span'), { className: 'cell' });
+  roll.prepend(el);             // in the page before drawing: "pixel" fonts read the computed style
+  const drum = Object.assign(document.createElement('span'), { className: 'drum' });
+  el.append(drum);
+  const faces = ROWS.map((row) => {
+    const face = Object.assign(document.createElement('span'),
+                               { className: `face ${row === 0 ? 'cur' : Math.abs(row) === 1 ? 'voisin' : ''}` });
+    face.style.transform = `rotateX(${36 * row * rollSign}deg) translateZ(2em)`;
+    drum.append(face);
+    return face;
+  });
+  void el.offsetWidth;          // a new column opens from zero: the box grows sideways
+  return { el, faces };
+}
+
+function showAmount(n, roll) {
+  shownAmount = n;
+  const rows = ROWS.map((row) => rowChars(n + row));
+  const count = Math.max(...rows.map((r) => r.length));
+  while (rollCells.length < count) rollCells.push(makeCell(roll));
+  rollCells.forEach((cell, i) => {
+    cell.faces.forEach((face, r) => drawFace(face, rows[r][i] || ''));
+    const middle = rows[ROWS.indexOf(0)][i] || '';
+    cell.el.classList.toggle('fixe', !!middle && !isDigit(middle));
+    cell.el.classList.toggle('vide', !middle);
+    cell.el.style.width = `${charWidth(middle, roll)}px`;
+  });
+}
+
+// No animation: page opening, resync, change of look or currency.
+function drawRoll(text) {
+  cancelAnimationFrame(rollFrame);
+  rollFrame = null;
+  turn = turnEnd = countFromTurn = 0;
+  turnSpeed = 0;
+  countFrom = countTo = digitsOf(text);
+  rollCells = [];
+  charWidths = new Map();
+  const roll = Object.assign(document.createElement('span'), { className: 'roll neuf' });
+  roll.classList.toggle('voisins', rollNeighbours);
+  roll.classList.toggle('apparent', rollWindow);
+  roll.classList.toggle('seul', rollSingle);
+  amountEl.replaceChildren(roll);
+  if (rollSingle) placeDigits(countTo, roll);
+  else showAmount(countTo, roll);
+  void roll.offsetWidth;
+  roll.classList.remove('neuf');
+}
+
+// ---- "chiffre unique": every digit is its own drum. cell.turn counts in digits: its
+// whole part modulo 10 is the digit in the middle, cell.end where it has to land.
+function showDigit(cell, whole) {
+  cell.faces.forEach((face, r) => drawFace(face, String((whole + ROWS[r] + 1000) % 10)));
+}
+
+// Sets the columns for this amount; those whose digit changes get a new `end`.
+function placeDigits(n, roll) {
+  shownAmount = n;
+  const chars = rowChars(n);
+  while (rollCells.length < chars.length) rollCells.push(makeCell(roll));
+  rollCells.forEach((cell, i) => {
+    const ch = chars[i] || '';
+    cell.el.classList.toggle('fixe', !isDigit(ch));
+    cell.el.style.width = `${charWidth(ch, roll)}px`;
+    if (!isDigit(ch)) {
+      cell.faces.forEach((face, r) => drawFace(face, ROWS[r] ? '' : ch));
+      return;
+    }
+    const digit = Number(ch);
+    if (cell.end === undefined) {
+      // a column just opened by this donation starts from 0; on a fresh drawing, on its digit
+      const start = roll.dataset.drawn ? 0 : digit;
+      cell.turn = cell.end = start;
+      cell.speed = 0;
+      showDigit(cell, start);
+    }
+    cell.end += (digit - cell.end % 10 + 10) % 10;
+  });
+  roll.dataset.drawn = '1';
+}
+
+function spinDigits(dt, roll) {
+  let moving = false;
+  for (const cell of rollCells) {
+    if (cell.end === undefined || (cell.turn === cell.end && !cell.speed)) continue;
+    const before = Math.floor(cell.turn);
+    const x = cell.turn - cell.end;
+    const a = cell.speed + SPRING * x;
+    const e = Math.exp(-SPRING * dt);
+    cell.turn = cell.end + (x + a * dt) * e;
+    cell.speed = (cell.speed - SPRING * a * dt) * e;
+    const done = Math.abs(cell.turn - cell.end) < .002 && Math.abs(cell.speed) < .01;
+    if (done) { cell.turn = cell.end; cell.speed = 0; } else moving = true;
+    const whole = Math.min(cell.end, Math.floor(cell.turn));
+    if (whole !== before) showDigit(cell, whole);
+    cell.el.classList.toggle('tourne', !done);
+    cell.el.style.setProperty('--angle', -36 * rollSign * Math.max(0, cell.turn - whole));
+  }
+  return moving;
+}
+
+// Far from the end the count takes big strides; the last rows go one by one, so the
+// drum lands on the true total with no jump.
+function amountAt(wholeTurn) {
+  const left = turnEnd - wholeTurn;
+  const last = Math.min(LAST_ROWS, turnEnd - countFromTurn);
+  if (left <= last) return countTo - left;
+  const done = (wholeTurn - countFromTurn) / (turnEnd - countFromTurn - last);
+  return Math.round(countFrom + (countTo - last - countFrom) * done);
+}
+
+// A donation. A lower total (rehearsal of a milestone) just shows up, no count backwards.
+function rollTo(text) {
+  const roll = amountEl.querySelector('.roll');
+  const target = digitsOf(text);
+  if (!roll || target < shownAmount) return drawRoll(text);
+  if (target === countTo) return;
+  if (rollSingle) {
+    countTo = target;
+    placeDigits(target, roll);
+    roll.classList.add('spin');
+    if (rollFrame === null) { lastFrame = performance.now(); rollFrame = requestAnimationFrame(spinFrame); }
+    return;
+  }
+  countFrom = shownAmount;
+  countFromTurn = Math.floor(turn);
+  countTo = target;
+  turnEnd = countFromTurn + Math.min(MAX_ROWS, target - shownAmount);
+  roll.classList.add('spin');
+  if (rollFrame === null) { lastFrame = performance.now(); rollFrame = requestAnimationFrame(spinFrame); }
+}
+
+// Critically damped spring: starts slowly, ends slowly, and a new donation arriving
+// mid-way never breaks the movement since position and speed stay continuous.
+// Exact formula: a throttled OBS scene just lands on the right amount when it wakes up.
+function spinFrame(now) {
+  const dt = Math.max(0, now - lastFrame) / 1000;
+  lastFrame = now;
+  const roll = amountEl.querySelector('.roll');
+  if (rollSingle) {
+    if (spinDigits(dt, roll)) { rollFrame = requestAnimationFrame(spinFrame); return; }
+    rollFrame = null;
+    roll.classList.remove('spin');
+    return;
+  }
+  const x = turn - turnEnd;
+  const a = turnSpeed + SPRING * x;
+  const e = Math.exp(-SPRING * dt);
+  turn = turnEnd + (x + a * dt) * e;
+  turnSpeed = (turnSpeed - SPRING * a * dt) * e;
+  const done = Math.abs(turn - turnEnd) < .002 && Math.abs(turnSpeed) < .01;
+  if (done) { turn = turnEnd; turnSpeed = 0; }
+  // the spring may brush past its end by a hair: keep the drum on the last row
+  const whole = Math.min(turnEnd, Math.floor(turn));
+  const amount = amountAt(whole);
+  if (amount !== shownAmount) showAmount(amount, roll);
+  roll.style.setProperty('--angle', -36 * rollSign * Math.max(0, turn - whole));
+  if (done) {
+    rollFrame = null;
+    roll.classList.remove('spin');
+    return;
+  }
+  rollFrame = requestAnimationFrame(spinFrame);
+}
+
+texts.set(titleEl, titleEl.textContent);
+texts.set(amountEl, amountEl.textContent);
+
+// Every value was validated by the server (colours #rrggbb, bounded numbers).
+// Shadows are built here rather than with color-mix(): OBS ships an older Chromium.
+function applyStyle(st) {
+  if (!st) return;
+  const k = st.intensite / 100;
+  const shadow = (parts) => (k > 0 ? parts.join(', ') : 'none');
+  const set = (name, value) => document.documentElement.style.setProperty(name, value);
+  set('--neon', st.neon);
+  set('--glow', shadow([`0 0 ${15 * k}px ${rgba(st.neon, 0.8 * k)}`,
+                        `inset 0 0 ${10 * k}px ${rgba(st.neon, 0.5 * k)}`]));
+  set('--bg', rgba(st.fond, st.opacite_fond / 100));
+  set('--border-w', `${st.contour}px`);
+  set('--radius', `${st.arrondi}px`);
+  set('--opacity', st.opacite / 100);
+  set('--font', st.police_css);
+  set('--title-size', `${st.taille_titre}px`);
+  set('--title-color', st.titre_couleur);
+  set('--title-glow', shadow([`0 0 ${6 * k}px ${st.lueur_texte}`, `0 0 ${14 * k}px ${st.lueur_texte}`]));
+  // same glow for text drawn in squares (a canvas has no text-shadow)
+  const drop = (parts) => (k > 0 ? parts.map((p) => `drop-shadow(${p})`).join(' ') : 'none');
+  set('--title-glow-f', drop([`0 0 ${3 * k}px ${st.lueur_texte}`, `0 0 ${7 * k}px ${st.lueur_texte}`]));
+  set('--amount-glow-f', drop([`0 0 ${4 * k}px ${st.lueur_texte}`, `0 0 ${9 * k}px ${st.lueur_texte}`,
+                               `0 0 ${16 * k}px ${rgba(st.lueur_texte, 0.7)}`]));
+  set('--amount-size', `${st.taille_montant}px`);
+  set('--amount-color', st.montant_couleur);
+  set('--amount-glow', shadow([`0 0 ${8 * k}px ${st.lueur_texte}`, `0 0 ${18 * k}px ${st.lueur_texte}`,
+                               `0 0 ${32 * k}px ${rgba(st.lueur_texte, 0.7)}`]));
+  set('--badge-bg', st.badge_fond);
+  set('--badge-fg', st.badge_texte);
+  set('--flash', st.flash);
+  set('--flash-glow', `0 0 28px ${rgba(st.flash, 0.95)}, 0 0 60px ${rgba(st.flash, 0.55)}, `
+                      + `inset 0 0 18px ${rgba(st.flash, 0.6)}`);
+  titleEl.style.display = st.afficher_titre ? '' : 'none';
+  showBadge = st.afficher_badge;
+  rouleau = !!st.animation_rouleau;
+  rollSign = st.rouleau_sens === 'haut' ? -1 : 1;
+  rollWindow = !!st.rouleau_apparent;
+  rollNeighbours = rouleau && !!st.rouleau_voisins && !rollWindow;
+  rollSingle = !!st.rouleau_unique;
+  amountEl.classList.toggle('avec-voisins', rollNeighbours);
+  setCurrency(st.devise, st.taux);
+  pixelSize = st.police_pixel || 0;
+  pixelFont = st.police_css;
+  repaintAll();                 // sizes, colours or font changed
+}
+
+function setTitle(t) {
+  if (t) paint(titleEl, t.toUpperCase());
+}
+
+
+// Total en cents entiers. Un nouveau don fait tourner la roulette (si elle est activée).
+function setTotal(cents, donation = false) {
+  if (!Number.isSafeInteger(cents)) return;
+  lastCents = cents;
+  const v = cents / 100 / taux;
+  if (donation && rouleau) {
+    texts.set(amountEl, money.format(v));
+    rollTo(money.format(v));
+  } else {
+    paint(amountEl, money.format(v));
+  }
+  // Premier total reçu (ouverture, reconnexion) : mémorisé sans clignoter.
+  if (dernierTotal !== null && v > dernierTotal && PALIERS.some((p) => dernierTotal < p && v >= p)) {
+    flashPalier();
+  }
+  dernierTotal = v;
+}
+
+// Badges : un par don, en file (`queue`), montant en cents.
+let badgeTimer = null;
+function releaseBadge() {
+  clearTimeout(badgeTimer);
+  badgeBusy = false;
+  pumpBadge();
+}
+
+function pumpBadge() {
+  if (badgeBusy || queue.length === 0) return;
+  badgeBusy = true;
+  paint(badgeEl, `+ ${money.format(queue.shift() / 100 / taux)}`);
+  badgeEl.classList.remove('pop');
+  void badgeEl.offsetWidth;            // relance l'animation
+  badgeEl.classList.add('pop');
+  // animationend seul ne suffit pas : une scène OBS cachée fige les animations.
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(releaseBadge, 4800);
+}
+badgeEl.addEventListener('animationend', releaseBadge);
+
+// Un seul WebSocket, reconnexion pour toujours : le dernier chiffre reste affiché,
+// aucune erreur n'apparaît jamais à l'écran (statut "stale" compris).
+const seenBadges = new Set();   // un don n'est jamais montré deux fois, même renvoyé
+let delay = 500;
+let ping = null;
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${host}/ws?scope=${scope}`);
+  ws.onopen = () => {
+    delay = 500;
+    // heartbeat : un socket tué par un redémarrage est détecté en quelques secondes.
+    clearInterval(ping);
+    ping = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) ws.send('ping'); else ws.close();
+    }, 10000);
+  };
+  ws.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.currency) setCurrency(msg.currency, 1);
+    const fresh = (msg.new_donations || []).filter((d) => !seenBadges.has(d.id));
+    fresh.forEach((d) => seenBadges.add(d.id));
+    setTotal(msg.total_cents, fresh.length > 0);
+    if (showBadge) fresh.forEach((d) => { queue.push(d.amount_cents); pumpBadge(); });
+  };
+  ws.onclose = () => {
+    clearInterval(ping);
+    setTimeout(connect, delay);
+    delay = Math.min(delay * 2, 3000);   // de nouveau à l'antenne en 3 s au plus
+  };
+  ws.onerror = () => ws.close();
+}
+if (scope === 'perso') setTitle('MA CAGNOTTE');
+connect();
+</script>
