@@ -1,9 +1,8 @@
 <div align="center">
 
-<!-- LOGO : déposer le fichier dans assets/logo.png, puis retirer les marques de commentaire de la ligne suivante. -->
-<!-- <img src="assets/logo.png" alt="Logo Lumea" width="160"> -->
+<img src="assets/banner.png" alt="Lumea" width="100%">
 
-# Lumea
+<br>
 
 **Les dons de ta campagne Streamlabs Charity, en direct dans OBS.**
 **Gratuit, pour Windows, et un total toujours juste.**
@@ -212,7 +211,7 @@ widgets/
   global/index.html   widget total global et perso (roulette, badge, paliers)
   fonts/              polices livrées, avec leurs licences OFL
 themes/               les 8 thèmes en JSON (réglages de base)
-assets/               logo (à venir)
+assets/               logo et bannières
 ```
 
 Les installateurs sont publiés dans les [releases](https://github.com/tristanbest0802-beep/Lumea-widgets/releases).
