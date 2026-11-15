@@ -689,6 +689,7 @@ function handleTest(t) {
 }
 let delay = 500;
 let ping = null;
+let build = '';                 // empreinte des pages du widget, donnée par Lumea au branchement
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${host}/ws?scope=${scope}${member ? '&member=' + encodeURIComponent(member) : ''}`);
@@ -703,6 +704,13 @@ function connect() {
   ws.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
+    // « Appliquer » dans Lumea, ou une page restée ouverte pendant une mise à jour de Lumea : la page se
+    // recharge toute seule. L'adresse collée dans OBS ne change jamais.
+    if (msg.reload) return location.reload();
+    if (msg.build) {
+      if (build && build !== msg.build) return location.reload();
+      build = msg.build;
+    }
     if (msg.test) return handleTest(msg.test);
     if (msg.style) applyStyle(msg.style);       // first message, then each change made in Lumea
     if (!('status' in msg)) return;             // a style alone carries no total
