@@ -1,0 +1,171 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Lumea : derniers dons</title>
+<link rel="stylesheet" href="/widgets/fonts/fonts.css">  <!-- polices livrées : aucun appel à internet -->
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  body { padding: 24px 30px; box-sizing: border-box; }
+  /* Même système de style que le total : les valeurs viennent du serveur (applyStyle). */
+  :root {
+    --neon: #1f5fcc;
+    --glow: 0 0 5px rgba(31, 95, 204, 0.24), inset 0 0 3px rgba(31, 95, 204, 0.15);
+    --bg: rgba(11, 27, 58, 0.92);
+    --border-w: 3px; --radius: 20px; --opacity: 1;
+    --font: 'Hanken Grotesk', sans-serif;
+    --title-size: 13px; --title-color: #b8ccf0; --title-glow: 0 0 2px #5b8def;
+    --amount-color: #ffffff; --amount-glow: 0 0 6px #5b8def;
+    --badge-bg: #ffc83d;
+  }
+  .box {
+    background: var(--bg); border: var(--border-w) solid var(--neon); border-radius: var(--radius);
+    box-shadow: var(--glow); opacity: var(--opacity);
+    padding: 18px 22px 12px; font-family: var(--font); color: var(--amount-color);
+  }
+  .title {
+    font-size: var(--title-size); letter-spacing: 3px; text-align: center; margin-bottom: 8px;
+    color: var(--title-color); text-shadow: var(--title-glow); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .row {
+    --tier: var(--neon);
+    display: grid; grid-template-columns: 1fr auto; column-gap: 14px; align-items: baseline;
+    padding: 9px 0 9px 12px; border-left: 4px solid var(--tier); margin-top: 6px;
+    background: rgba(255, 255, 255, 0.04); border-radius: 0 10px 10px 0; overflow: hidden;
+  }
+  .row.palier { --tier: var(--c); }
+  .name { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .amt {
+    font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 10px;
+    color: var(--amount-color); text-shadow: var(--amount-glow);
+  }
+  .row.palier .amt { color: var(--c); }
+  .msg {
+    grid-column: 1 / -1; font-size: 13px; opacity: .8; margin-top: 2px; padding-right: 10px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .row.neuf { animation: rowIn .55s ease-out; }
+  @keyframes rowIn {
+    from { opacity: 0; max-height: 0; transform: translateY(-14px); padding-top: 0; padding-bottom: 0; }
+    to   { opacity: 1; max-height: 90px; transform: none; }
+  }
+  .reduit .row.neuf { animation: none; }
+  @media (prefers-reduced-motion: reduce) { .row.neuf { animation: none; } }
+</style>
+
+<div class="box">
+  <div class="title" id="title">DERNIERS DONS</div>
+  <div id="list"></div>
+</div>
+
+<script>
+// Le widget ne parle qu'à Lumea, sur la machine. Les dons viennent du registre (au branchement, puis à
+// chaque envoi) ; les dons de test arrivent en direct et ne vivent que dans cette page.
+const listEl = document.getElementById('list');
+const titleEl = document.getElementById('title');
+let money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD' });
+let devise = 'CAD', styleCurrency = '';
+let lines = 6, showMessages = true, tiers = [];
+let real = [], tests = [], testSeq = 0;
+const shown = new Set();        // ids déjà dessinés : seuls les autres s'animent
+let firstDraw = true;
+
+function setCurrency(code) {
+  if (!code || code === devise) return;
+  try { money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: code }); devise = code; }
+  catch { /* code inconnu de ce navigateur : on garde l'ancien */ }
+}
+const tierColor = (cents) => (tiers.filter((x) => cents >= x.min_cents).pop() || {}).color;
+
+function render() {
+  const rows = [...tests, ...real].slice(0, lines);
+  const nodes = rows.map((d) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const c = tierColor(d.amount_cents);
+    if (c) { row.classList.add('palier'); row.style.setProperty('--c', c); }
+    if (!firstDraw && !shown.has(d.id)) row.classList.add('neuf');
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = d.donor_name || 'Anonyme';
+    const amt = document.createElement('div');
+    amt.className = 'amt';
+    amt.textContent = money.format(d.amount_cents / 100);
+    row.append(name, amt);
+    if (showMessages && d.message) {
+      const msg = document.createElement('div');
+      msg.className = 'msg';
+      msg.textContent = d.message;
+      row.append(msg);
+    }
+    return row;
+  });
+  rows.forEach((d) => shown.add(d.id));
+  listEl.replaceChildren(...nodes);
+}
+
+const rgb = (h) => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const rgba = (h, a) => `rgba(${rgb(h).join(',')},${a.toFixed(2)})`;
+
+function applyStyle(st) {
+  if (!st) return;
+  const k = st.intensite / 100;
+  const shadow = (parts) => (k > 0 ? parts.join(', ') : 'none');
+  const set = (n, v) => document.documentElement.style.setProperty(n, v);
+  set('--neon', st.neon);
+  set('--glow', shadow([`0 0 ${15 * k}px ${rgba(st.neon, 0.8 * k)}`, `inset 0 0 ${10 * k}px ${rgba(st.neon, 0.5 * k)}`]));
+  set('--bg', rgba(st.fond, st.opacite_fond / 100));
+  set('--border-w', `${st.contour}px`);
+  set('--radius', `${st.arrondi}px`);
+  set('--opacity', st.opacite / 100);
+  set('--font', st.police_css);   // les polices « pixel » dessinées en carrés restent des polices normales ici
+  set('--title-size', `${st.taille_titre}px`);
+  set('--title-color', st.titre_couleur);
+  set('--title-glow', shadow([`0 0 ${6 * k}px ${st.lueur_texte}`, `0 0 ${14 * k}px ${st.lueur_texte}`]));
+  set('--amount-color', st.montant_couleur);
+  set('--amount-glow', shadow([`0 0 ${8 * k}px ${st.lueur_texte}`]));
+  set('--badge-bg', st.badge_fond);
+  titleEl.style.display = st.afficher_titre ? '' : 'none';
+  document.documentElement.classList.toggle('reduit',
+    !!st.animations_reduites || matchMedia('(prefers-reduced-motion: reduce)').matches);
+  lines = st.recents_lignes;
+  showMessages = st.recents_messages;
+  tiers = [...(st.tiers || [])].sort((a, b) => a.min_cents - b.min_cents);
+  styleCurrency = st.devise;
+  if (st.devise) setCurrency(st.devise);
+  render();
+}
+
+function handleTest(t) {
+  if (t.kind !== 'donation' || !Number.isSafeInteger(t.amount_cents)) return;
+  tests.unshift({ id: `test-${++testSeq}`, amount_cents: t.amount_cents,
+                  donor_name: t.donor_name || null, message: t.message || null });
+  tests.length = Math.min(tests.length, 10);
+  render();
+}
+
+let delay = 500, ping = null;
+function connect() {
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?scope=recents`);
+  ws.onopen = () => {
+    delay = 500;
+    clearInterval(ping);
+    ping = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); else ws.close(); }, 10000);
+  };
+  ws.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.test) return handleTest(msg.test);
+    if (msg.style) applyStyle(msg.style);
+    if (msg.currency && !styleCurrency) setCurrency(msg.currency);
+    if (!Array.isArray(msg.recents)) return;
+    const before = new Set(real.map((d) => d.id));
+    if (!firstDraw && msg.recents.some((d) => !before.has(d.id))) tests = [];  // un vrai don : fin des essais
+    real = msg.recents;
+    render();
+    firstDraw = false;
+  };
+  ws.onclose = () => { clearInterval(ping); setTimeout(connect, delay); delay = Math.min(delay * 2, 3000); };
+  ws.onerror = () => ws.close();
+}
+connect();
+</script>

@@ -184,7 +184,15 @@ let badgeBusy = false;
 
 const boxEl = document.querySelector('.box');
 
-function flashPalier() {
+// Flash colour of one milestone (#rrggbb from the server), else the theme's own (--flash on the page).
+function flashVars(c) {
+  return { '--flash': c, '--flash-glow': `0 0 28px ${rgba(c, 0.95)}, 0 0 60px ${rgba(c, 0.55)}, `
+                                        + `inset 0 0 18px ${rgba(c, 0.6)}` };
+}
+function flashPalier(color) {
+  for (const k of ['--flash', '--flash-glow']) {
+    if (color) boxEl.style.setProperty(k, flashVars(color)[k]); else boxEl.style.removeProperty(k);
+  }
   boxEl.classList.remove('palier');
   void boxEl.offsetWidth;         // relance l'animation si elle tourne deja
   boxEl.classList.add('palier');
@@ -196,6 +204,7 @@ boxEl.addEventListener('animationend', (e) => {
 // ---- look: style sent by the server (or, in the admin preview, by the editor) ----
 const titleEl = document.querySelector('.title');
 let showBadge = true;
+let tiers = [];                 // [{min_cents, color}]: the badge takes the colour of the highest tier reached
 let lastTitre = null;
 
 const rgb = (h) => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
@@ -524,9 +533,8 @@ function applyStyle(st) {
                                `0 0 ${32 * k}px ${rgba(st.lueur_texte, 0.7)}`]));
   set('--badge-bg', st.badge_fond);
   set('--badge-fg', st.badge_texte);
-  set('--flash', st.flash);
-  set('--flash-glow', `0 0 28px ${rgba(st.flash, 0.95)}, 0 0 60px ${rgba(st.flash, 0.55)}, `
-                      + `inset 0 0 18px ${rgba(st.flash, 0.6)}`);
+  for (const [k, v] of Object.entries(flashVars(st.flash))) set(k, v);
+  tiers = [...(st.tiers || [])].sort((a, b) => a.min_cents - b.min_cents);
   titleEl.style.display = st.afficher_titre ? '' : 'none';
   showBadge = st.afficher_badge;
   const reduit = !!st.animations_reduites || matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -576,7 +584,14 @@ function releaseBadge() {
 function pumpBadge() {
   if (badgeBusy || queue.length === 0) return;
   badgeBusy = true;
-  paint(badgeEl, `+ ${money.format(queue.shift() / 100 / taux)}`);
+  const cents = queue.shift();
+  const tier = tiers.filter((x) => cents >= x.min_cents).pop();
+  badgeEl.style.setProperty('--badge-bg', tier ? tier.color : '');
+  if (tier) {                    // dark or white text, whichever reads on that colour
+    const [r, g, b] = rgb(tier.color);
+    badgeEl.style.setProperty('--badge-fg', (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#0b1b3a' : '#ffffff');
+  } else badgeEl.style.removeProperty('--badge-fg');
+  paint(badgeEl, `+ ${money.format(cents / 100 / taux)}`);
   badgeEl.classList.remove('pop');
   void badgeEl.offsetWidth;            // relance l'animation
   badgeEl.classList.add('pop');
@@ -593,7 +608,7 @@ const seenMilestones = new Set();   // un palier ne clignote qu'une fois, même 
 let realCents = null;           // dernier total confirmé : un don de test ne le remplace jamais
 let testTimer = null;
 function handleTest(t) {
-  if (t.kind === 'milestone') return flashPalier();
+  if (t.kind === 'milestone') return flashPalier(t.color);
   if (t.kind === 'donation' && Number.isSafeInteger(t.amount_cents)) {
     if (showBadge) { queue.push(t.amount_cents); pumpBadge(); }
     if (realCents !== null) {
@@ -635,7 +650,7 @@ function connect() {
     setTotal(msg.total_cents, fresh.length > 0);
     const flashes = (msg.milestones || []).filter((m) => !seenMilestones.has(m.id));
     flashes.forEach((m) => seenMilestones.add(m.id));
-    if (flashes.length > 0) flashPalier();
+    if (flashes.length > 0) flashPalier(flashes[0].color);
     if (showBadge) fresh.forEach((d) => { queue.push(d.amount_cents); pumpBadge(); });
   };
   ws.onclose = () => {
