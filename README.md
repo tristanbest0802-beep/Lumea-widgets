@@ -9,11 +9,11 @@
 
 <br>
 
-<a href="https://github.com/tristanbest0802-beep/Lumea-widgets/releases/download/v0.2.4/Lumea-Setup-0.2.4.exe">
+<a href="https://github.com/tristanbest0802-beep/Lumea-widgets/releases/download/v0.2.5/Lumea-Setup-0.2.5.exe">
   <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger%20Lumea-Installateur%20Windows-1F5FCC?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger l'installateur de Lumea pour Windows" height="56">
 </a>
 
-<b><!-- version -->Version 0.2.4<!-- /version --></b>
+<b><!-- version -->Version 0.2.5<!-- /version --></b>
 
 <sub>Windows 10 et 11 · gratuit · aucun compte à créer · <a href="https://github.com/tristanbest0802-beep/Lumea-widgets/releases">toutes les versions</a></sub>
 
@@ -229,7 +229,7 @@ Chaque widget ne parle qu'au Lumea installé sur son propre PC, à l'adresse `12
 
 <div align="center">
 <br>
-<a href="https://github.com/tristanbest0802-beep/Lumea-widgets/releases/download/v0.2.4/Lumea-Setup-0.2.4.exe">
+<a href="https://github.com/tristanbest0802-beep/Lumea-widgets/releases/download/v0.2.5/Lumea-Setup-0.2.5.exe">
   <img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger%20Lumea-Installateur%20Windows-1F5FCC?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger l'installateur de Lumea pour Windows" height="44">
 </a>
 </div>
