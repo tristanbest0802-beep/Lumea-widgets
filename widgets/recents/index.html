@@ -14,15 +14,26 @@
     --font: 'Hanken Grotesk', sans-serif;
     --title-size: 13px; --title-color: #b8ccf0; --title-glow: 0 0 2px #5b8def;
     --amount-color: #ffffff; --amount-glow: 0 0 6px #5b8def;
-    --badge-bg: #ffc83d;
+    --title-spacing: 3px; --pad: 1; --border-style: solid; --row-size: 18px;
+    --glow-strong: 0 0 9px rgba(31, 95, 204, 0.3), inset 0 0 5px rgba(31, 95, 204, 0.22); --pulse-time: 3s;
   }
   .box {
-    background: var(--bg); border: var(--border-w) solid var(--neon); border-radius: var(--radius);
+    position: relative;
+    background: var(--bg); border: var(--border-w) var(--border-style) var(--neon); border-radius: var(--radius);
     box-shadow: var(--glow); opacity: var(--opacity);
-    padding: 18px 22px 12px; font-family: var(--font); color: var(--amount-color);
+    padding: calc(18px * var(--pad)) calc(22px * var(--pad)) calc(12px * var(--pad));
+    font-family: var(--font); color: var(--amount-color);
   }
+  /* "Néon qui respire" : seule l'opacité d'une lueur plus forte bouge, donc aucun scintillement. */
+  .box::after {
+    content: ''; position: absolute; inset: calc(-1 * var(--border-w)); border-radius: var(--radius);
+    box-shadow: var(--glow-strong); opacity: 0; pointer-events: none;
+  }
+  .box.pulse::after { animation: neonPulse var(--pulse-time) ease-in-out infinite; }
+  @keyframes neonPulse { 50% { opacity: 1; } }
+  .reduit .box.pulse::after { animation: none; }
   .title {
-    font-size: var(--title-size); letter-spacing: 3px; text-align: center; margin-bottom: 8px;
+    font-size: var(--title-size); letter-spacing: var(--title-spacing); text-align: center; margin-bottom: 8px;
     color: var(--title-color); text-shadow: var(--title-glow); white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
   }
@@ -33,14 +44,14 @@
     background: rgba(255, 255, 255, 0.04); border-radius: 0 10px 10px 0; overflow: hidden;
   }
   .row.palier { --tier: var(--c); }
-  .name { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .name { font-size: var(--row-size); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .amt {
-    font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 10px;
+    font-size: calc(var(--row-size) + 2px); font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 10px;
     color: var(--amount-color); text-shadow: var(--amount-glow);
   }
   .row.palier .amt { color: var(--c); }
   .msg {
-    grid-column: 1 / -1; font-size: 13px; opacity: .8; margin-top: 2px; padding-right: 10px;
+    grid-column: 1 / -1; font-size: calc(var(--row-size) - 5px); opacity: .8; margin-top: 2px; padding-right: 10px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .row.neuf { animation: rowIn .55s ease-out; }
@@ -49,7 +60,6 @@
     to   { opacity: 1; max-height: 90px; transform: none; }
   }
   .reduit .row.neuf { animation: none; }
-  @media (prefers-reduced-motion: reduce) { .row.neuf { animation: none; } }
 </style>
 
 <div class="box">
@@ -63,16 +73,31 @@
 const listEl = document.getElementById('list');
 const titleEl = document.getElementById('title');
 let money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD' });
-let devise = 'CAD', styleCurrency = '';
+let styleCurrency = '', campaignCurrency = '';
+let taux = 1, curFormat = 'symbole', showCents = true, moneyKey = '';
 let lines = 6, showMessages = true, tiers = [];
 let real = [], tests = [], testSeq = 0;
 const shown = new Set();        // ids déjà dessinés : seuls les autres s'animent
 let firstDraw = true;
 
-function setCurrency(code) {
-  if (!code || code === devise) return;
-  try { money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: code }); devise = code; }
-  catch { /* code inconnu de ce navigateur : on garde l'ancien */ }
+// `taux` : combien d'unités de la devise affichée pour 1 de la campagne (1 si c'est la même). Le serveur
+// l'envoie avec le style ; les montants reçus restent en cents de la campagne.
+function setCurrency(code, rate) {
+  if (!code || !(rate > 0)) { code = 'CAD'; rate = 1; }
+  const digits = showCents ? 2 : 0;
+  const key = [code, rate, curFormat, digits].join('|');
+  if (key === moneyKey) return;
+  const opts = curFormat === 'sans' ? { style: 'decimal' }
+    : { style: 'currency', currency: code, currencyDisplay: curFormat === 'code' ? 'code' : 'symbol' };
+  try {
+    money = new Intl.NumberFormat('fr-CA', { ...opts, minimumFractionDigits: digits, maximumFractionDigits: digits });
+  } catch { return; }           // code inconnu de ce navigateur : on garde l'ancien
+  taux = rate;
+  moneyKey = key;
+}
+function fmt(cents) {
+  const v = cents / 100 * taux;
+  return money.format(showCents ? v : Math.floor(v + 1e-9));
 }
 const tierColor = (cents) => (tiers.filter((x) => cents >= x.min_cents).pop() || {}).color;
 
@@ -89,7 +114,7 @@ function render() {
     name.textContent = d.donor_name || 'Anonyme';
     const amt = document.createElement('div');
     amt.className = 'amt';
-    amt.textContent = money.format(d.amount_cents / 100);
+    amt.textContent = fmt(d.amount_cents);
     row.append(name, amt);
     if (showMessages && d.message) {
       const msg = document.createElement('div');
@@ -125,13 +150,24 @@ function applyStyle(st) {
   set('--amount-glow', shadow([`0 0 ${8 * k}px ${st.lueur_texte}`]));
   set('--badge-bg', st.badge_fond);
   titleEl.style.display = st.afficher_titre ? '' : 'none';
-  document.documentElement.classList.toggle('reduit',
-    !!st.animations_reduites || matchMedia('(prefers-reduced-motion: reduce)').matches);
+  titleEl.textContent = st.titre_majuscules ? st.recents_titre.toUpperCase() : st.recents_titre;
+  // seule l'option du style décide : le réglage « animations » de Windows n'est pas lu
+  document.documentElement.classList.toggle('reduit', !!st.animations_reduites);
+  set('--title-spacing', `${st.espacement_titre}px`);
+  set('--pad', st.marge / 100);
+  set('--border-style', { tirets: 'dashed', points: 'dotted', double: 'double' }[st.contour_style] || 'solid');
+  set('--row-size', `${st.recents_taille}px`);
+  set('--glow-strong', shadow([`0 0 ${30 * k}px ${rgba(st.neon, Math.min(1, k))}`,
+                               `inset 0 0 ${18 * k}px ${rgba(st.neon, Math.min(1, 0.75 * k))}`]));
+  set('--pulse-time', `${st.neon_vitesse}s`);
+  document.querySelector('.box').classList.toggle('pulse', !!st.neon_pulse && k > 0);
   lines = st.recents_lignes;
   showMessages = st.recents_messages;
   tiers = [...(st.tiers || [])].sort((a, b) => a.min_cents - b.min_cents);
-  styleCurrency = st.devise;
-  if (st.devise) setCurrency(st.devise);
+  curFormat = st.devise_format;
+  showCents = !!st.afficher_cents;
+  styleCurrency = st.devise;       // "" = celle de la campagne
+  setCurrency(st.devise || campaignCurrency, st.devise ? st.taux : 1);
   render();
 }
 
@@ -156,7 +192,10 @@ function connect() {
     try { msg = JSON.parse(e.data); } catch { return; }
     if (msg.test) return handleTest(msg.test);
     if (msg.style) applyStyle(msg.style);
-    if (msg.currency && !styleCurrency) setCurrency(msg.currency);
+    if (msg.currency) {
+      campaignCurrency = msg.currency;
+      if (!styleCurrency) setCurrency(msg.currency, 1);
+    }
     if (!Array.isArray(msg.recents)) return;
     const before = new Set(real.map((d) => d.id));
     if (!firstDraw && msg.recents.some((d) => !before.has(d.id))) tests = [];  // un vrai don : fin des essais

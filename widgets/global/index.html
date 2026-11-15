@@ -34,20 +34,38 @@
     --flash: #ffc83d;
     --flash-glow: 0 0 28px rgba(255, 200, 61, 0.95), 0 0 60px rgba(255, 200, 61, 0.55),
                   inset 0 0 18px rgba(255, 200, 61, 0.6);
+    --flash-time: .9s;
+    --flash-count: 7;
+    --title-spacing: 3px;
+    --pad: 1;
+    --border-style: solid;
+    --badge-size: 13px;
+    --badge-hold: 4.5s;       /* the badge starts to fade this long after it appeared */
+    --glow-strong: 0 0 9px rgba(31, 95, 204, 0.3), inset 0 0 5px rgba(31, 95, 204, 0.22);
+    --pulse-time: 3s;
   }
   .box {
     position: relative;
     background: var(--bg);
-    border: var(--border-w) solid var(--neon);
+    border: var(--border-w) var(--border-style) var(--neon);
     border-radius: var(--radius);
-    padding: 26px 48px;
+    padding: calc(26px * var(--pad)) calc(48px * var(--pad));
     text-align: center;
     box-shadow: var(--glow);
     opacity: var(--opacity);
   }
+  /* "Néon qui respire": a stronger glow laid over the frame, faded in and out. Only its opacity moves,
+     so the browser never redraws the shadow itself: no flicker, even in a busy OBS scene. */
+  .box::after {
+    content: ''; position: absolute; inset: calc(-1 * var(--border-w)); border-radius: var(--radius);
+    box-shadow: var(--glow-strong); opacity: 0; pointer-events: none;
+  }
+  .box.pulse::after { animation: neonPulse var(--pulse-time) ease-in-out infinite; }
+  @keyframes neonPulse { 50% { opacity: 1; } }
+  .reduit .box.pulse::after { animation: none; }
   .title {
     font-family: var(--font);
-    font-size: var(--title-size); letter-spacing: 3px;
+    font-size: var(--title-size); letter-spacing: var(--title-spacing);
     color: var(--title-color);
     text-shadow: var(--title-glow);
     margin-bottom: 20px;
@@ -103,42 +121,43 @@
     border-radius: 999px;
     padding: 9px 15px;
     font-family: var(--font);
-    font-size: 13px;
+    font-size: var(--badge-size);
     color: var(--badge-fg);
     white-space: nowrap;
     opacity: 0;
     pointer-events: none;
+    z-index: 2;               /* above the breathing glow */
   }
+  .badge[data-pos="haut_gauche"] { right: auto; left: -30px; }
+  .badge[data-pos="bas_droite"] { top: auto; bottom: -22px; }
+  .badge[data-pos="bas_gauche"] { top: auto; bottom: -22px; right: auto; left: -30px; }
   /* "Pixel" fonts: the text is a canvas drawn in small squares, glowing like text */
   .title canvas, .amount canvas, .badge canvas { display: block; margin: 0 auto; }
   .title canvas { filter: var(--title-glow-f, none); }
   .amount canvas { filter: var(--amount-glow-f, none); }
   /* Palier atteint : le cadre clignote (en jaune par defaut). */
-  .box.palier { animation: palierFlash 0.9s ease-in-out 7; }
+  .box.palier { animation: palierFlash var(--flash-time) ease-in-out var(--flash-count); }
   @keyframes palierFlash {
     0%, 100% { border-color: var(--neon); box-shadow: var(--glow); }
     50% { border-color: var(--flash); box-shadow: var(--flash-glow); }
   }
 
-  /* Animations réduites (option du style ou réglage du système) : le badge fond sans rebondir,
-     le cadre clignote deux fois, la roulette est coupée (voir rouleau dans applyStyle). */
-  .reduit .box.palier { animation-iteration-count: 2; }
-  .reduit .badge.pop { animation-name: badgeFade; }
-  @keyframes badgeFade { 0% { opacity: 0; } 10%, 85% { opacity: 1; } 100% { opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) {
-    .box.palier { animation-iteration-count: 2; }
-    .badge.pop { animation-name: badgeFade; }
-  }
-
-  .badge.pop { animation: badgePop 4.5s ease forwards; }
-  @keyframes badgePop {
+  /* Badge: an arrival (four kinds), then a fade that starts --badge-hold later. Two animations, so the
+     arrival keeps its speed whatever the time on screen. Animations réduites: always the plain fade. */
+  .badge.pop { animation: badgeIn .7s ease both, badgeOut .5s ease var(--badge-hold) forwards; }
+  .badge.pop[data-anim="fondu"] { animation-name: badgeFadeIn, badgeOut; }
+  .badge.pop[data-anim="glisse"] { animation-name: badgeSlideIn, badgeOut; }
+  .badge.pop[data-anim="zoom"] { animation-name: badgeZoomIn, badgeOut; }
+  @keyframes badgeIn {
     0%   { opacity: 0; transform: scale(.2) rotate(-20deg); }
-    8%   { opacity: 1; transform: scale(1.35) rotate(10deg); }
-    14%  { transform: scale(.9) rotate(-4deg); }
-    20%  { transform: scale(1) rotate(0deg); }
-    82%  { opacity: 1; transform: scale(1) rotate(0deg); }
-    100% { opacity: 0; transform: scale(1) rotate(0deg); }
+    45%  { opacity: 1; transform: scale(1.35) rotate(10deg); }
+    75%  { opacity: 1; transform: scale(.9) rotate(-4deg); }
+    100% { opacity: 1; transform: none; }
   }
+  @keyframes badgeFadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes badgeSlideIn { from { opacity: 0; transform: translateY(-18px); } to { opacity: 1; transform: none; } }
+  @keyframes badgeZoomIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+  @keyframes badgeOut { from { opacity: 1; } to { opacity: 0; } }
 </style>
 
 <div class="box">
@@ -160,22 +179,38 @@ const host = location.host;
 // Paliers : le serveur envoie chaque palier franchi une seule fois (msg.milestones), le widget ne
 // compare plus les totaux lui-même.
 
-// Display currency. The pot is counted in CAD; `taux` is what 1 unit of the
-// display currency is worth in CAD (reglages.txt, taux_devises). Milestones are
-// read in the display currency: 500 on a EUR widget means 500 euros.
+// Display currency. Every amount arrives in integer cents of the campaign currency. `taux` is how many
+// units of the display currency 1 unit of the campaign's is worth (1 when they are the same): the server
+// sends it with the style, the widget never guesses a rate.
 let money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD' });
-let devise = 'CAD', taux = 1, lastCents = null, styleCurrency = '';
+let devise = 'CAD', taux = 1, lastCents = null, teamCents = null;
+let styleCurrency = '', campaignCurrency = '';
+let curFormat = 'symbole', showCents = true, moneyKey = '';
+// Returns true when the writing of the amounts changed: the caller then redraws (repaintAll).
 function setCurrency(code, rate) {
-  if (!code || !(rate > 0)) { code = 'CAD'; rate = 1; }     // no rate yet: stay in CAD
-  if (code === devise && rate === taux) return;
+  if (!code || !(rate > 0)) { code = 'CAD'; rate = 1; }     // no rate: the amount stays as counted
+  const digits = showCents ? 2 : 0;
+  const key = [code, rate, curFormat, digits].join('|');
+  if (key === moneyKey) return false;
+  const opts = curFormat === 'sans' ? { style: 'decimal' }
+    : { style: 'currency', currency: code, currencyDisplay: curFormat === 'code' ? 'code' : 'symbol' };
   try {
-    money = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: code });
+    money = new Intl.NumberFormat('fr-CA', { ...opts, minimumFractionDigits: digits, maximumFractionDigits: digits });
   } catch {                                                  // code unknown to this browser
-    return setCurrency('CAD', 1);
+    return code !== 'CAD' && setCurrency('CAD', 1);
   }
   devise = code;
   taux = rate;
-  if (lastCents !== null) setTotal(lastCents);
+  moneyKey = key;
+  if (lastCents !== null) texts.set(amountEl, fmt(lastCents));
+  if (teamCents !== null) teamEl.textContent = 'ÉQUIPE ' + fmt(teamCents);
+  return true;
+}
+// Cents of the campaign -> text in the display currency. Without the cents the amount is cut, never
+// rounded up: the widget must not show a dollar that is not there yet.
+function fmt(cents) {
+  const v = cents / 100 * taux;
+  return money.format(showCents ? v : Math.floor(v + 1e-9));
 }
 const amountEl = document.getElementById('amount');
 const badgeEl = document.getElementById('badge');
@@ -205,7 +240,8 @@ boxEl.addEventListener('animationend', (e) => {
 const titleEl = document.querySelector('.title');
 let showBadge = true;
 let tiers = [];                 // [{min_cents, color}]: the badge takes the colour of the highest tier reached
-let lastTitre = null;
+let titleRaw = titleEl.textContent, upperTitle = true;
+let badgeTime = 5000;           // ms on screen
 
 const rgb = (h) => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
 const rgba = (h, a) => `rgba(${rgb(h).join(',')},${Math.max(0, Math.min(1, a)).toFixed(2)})`;
@@ -293,7 +329,7 @@ let shownAmount = 0;
 const ROWS = [-1, 0, 1, 2];     // offset of each row from the middle one; 2 enters from the top
 const MAX_ROWS = 16;            // rows turned for one donation, whatever its size
 const LAST_ROWS = 8;            // the end of the count goes one by one
-const SPRING = 5;
+let SPRING = 5;                 // stiffness of the movement: "Vitesse de la roulette" scales it
 
 const isDigit = (ch) => ch >= '0' && ch <= '9';
 const digitsOf = (text) => Number([...text].filter(isDigit).join('')) || 0;
@@ -536,40 +572,64 @@ function applyStyle(st) {
   for (const [k, v] of Object.entries(flashVars(st.flash))) set(k, v);
   tiers = [...(st.tiers || [])].sort((a, b) => a.min_cents - b.min_cents);
   titleEl.style.display = st.afficher_titre ? '' : 'none';
+  teamEl.style.display = st.afficher_equipe ? '' : 'none';
   showBadge = st.afficher_badge;
-  const reduit = !!st.animations_reduites || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Only the option of the style decides. The "animations" setting of Windows is not read: it is the
+  // comfort of the person at the PC, the widget is drawn for the viewers of the stream.
+  const reduit = !!st.animations_reduites;
   document.documentElement.classList.toggle('reduit', reduit);
+  set('--title-spacing', `${st.espacement_titre}px`);
+  set('--pad', st.marge / 100);
+  set('--border-style', { tirets: 'dashed', points: 'dotted', double: 'double' }[st.contour_style] || 'solid');
+  set('--glow-strong', shadow([`0 0 ${30 * k}px ${rgba(st.neon, k)}`, `inset 0 0 ${18 * k}px ${rgba(st.neon, 0.75 * k)}`]));
+  set('--pulse-time', `${st.neon_vitesse}s`);
+  boxEl.classList.toggle('pulse', !!st.neon_pulse && k > 0);
+  set('--badge-size', `${st.badge_taille}px`);
+  badgeTime = st.badge_duree * 1000;
+  set('--badge-hold', `${st.badge_duree - 0.5}s`);
+  badgeEl.dataset.pos = st.badge_position;
+  badgeEl.dataset.anim = reduit ? 'fondu' : st.badge_animation;
+  set('--flash-time', { lent: '1.4s', rapide: '.5s' }[st.flash_rythme] || '.9s');
+  set('--flash-count', reduit ? Math.min(2, st.flash_nombre) : st.flash_nombre);
   rouleau = !!st.animation_rouleau && !reduit;      // the amount then just changes: always the true total
-  if (scope === 'global' && st.titre) setTitle(st.titre);
+  SPRING = 5 * st.rouleau_vitesse / 100;
+  upperTitle = !!st.titre_majuscules;
+  if (scope === 'global' && st.titre) titleRaw = st.titre;
+  texts.set(titleEl, upperTitle ? titleRaw.toUpperCase() : titleRaw);
   rollSign = st.rouleau_sens === 'haut' ? -1 : 1;
   rollWindow = !!st.rouleau_apparent;
   rollNeighbours = rouleau && !!st.rouleau_voisins && !rollWindow;
   rollSingle = !!st.rouleau_unique;
   amountEl.classList.toggle('avec-voisins', rollNeighbours);
+  curFormat = st.devise_format;
+  showCents = !!st.afficher_cents;
   styleCurrency = st.devise;       // "" = the campaign's own, sent with the state
-  if (st.devise) setCurrency(st.devise, 1);
+  setCurrency(st.devise || campaignCurrency, st.devise ? st.taux : 1);
   pixelSize = st.police_pixel || 0;
   pixelFont = st.police_css;
-  repaintAll();                 // sizes, colours or font changed
+  repaintAll();                 // sizes, colours, font or currency changed
   // the font file loads on first use: redraw (the square-drawn text needs it) once it is there
   if (document.fonts) document.fonts.load(`700 20px ${st.police_css}`).then(repaintAll, () => {});
 }
 
 function setTitle(t) {
-  if (t) paint(titleEl, t.toUpperCase());
+  if (!t) return;
+  titleRaw = t;
+  paint(titleEl, upperTitle ? t.toUpperCase() : t);
 }
 
-
-// Total en cents entiers. Un nouveau don fait tourner la roulette (si elle est activée).
-function setTotal(cents, donation = false) {
-  if (!Number.isSafeInteger(cents)) return;
+// Total en cents entiers. La roulette tourne dès que le total monte, avec ou sans badge. Un total
+// inchangé ne redessine rien : une roulette en cours n'est jamais coupée par un simple rafraîchissement.
+function setTotal(cents) {
+  if (!Number.isSafeInteger(cents) || cents === lastCents) return;
+  const up = lastCents !== null && cents > lastCents;
   lastCents = cents;
-  const v = cents / 100 / taux;
-  if (donation && rouleau) {
-    texts.set(amountEl, money.format(v));
-    rollTo(money.format(v));
+  const text = fmt(cents);
+  if (up && rouleau) {
+    texts.set(amountEl, text);
+    rollTo(text);
   } else {
-    paint(amountEl, money.format(v));
+    paint(amountEl, text);      // première lecture, ou total en baisse : affiché tel quel
   }
 }
 
@@ -591,15 +651,17 @@ function pumpBadge() {
     const [r, g, b] = rgb(tier.color);
     badgeEl.style.setProperty('--badge-fg', (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#0b1b3a' : '#ffffff');
   } else badgeEl.style.removeProperty('--badge-fg');
-  paint(badgeEl, `+ ${money.format(cents / 100 / taux)}`);
+  paint(badgeEl, `+ ${fmt(cents)}`);
   badgeEl.classList.remove('pop');
   void badgeEl.offsetWidth;            // relance l'animation
   badgeEl.classList.add('pop');
   // animationend seul ne suffit pas : une scène OBS cachée fige les animations.
   clearTimeout(badgeTimer);
-  badgeTimer = setTimeout(releaseBadge, 4800);
+  badgeTimer = setTimeout(releaseBadge, badgeTime + 300);
 }
-badgeEl.addEventListener('animationend', releaseBadge);
+badgeEl.addEventListener('animationend', (e) => {
+  if (e.animationName === 'badgeOut') releaseBadge();   // la fin de l'arrivée ne libère pas la file
+});
 
 // Un seul WebSocket, reconnexion pour toujours : le dernier chiffre reste affiché,
 // aucune erreur n'apparaît jamais à l'écran (statut "stale" compris).
@@ -607,14 +669,21 @@ const seenBadges = new Set();   // un don n'est jamais montré deux fois, même 
 const seenMilestones = new Set();   // un palier ne clignote qu'une fois, même renvoyé
 let realCents = null;           // dernier total confirmé : un don de test ne le remplace jamais
 let testTimer = null;
+let testExtra = 0;              // dons de test en cours : une rafale monte comme de vrais dons
+function endTest() {
+  clearTimeout(testTimer);
+  testTimer = null;
+  testExtra = 0;
+}
 function handleTest(t) {
   if (t.kind === 'milestone') return flashPalier(t.color);
   if (t.kind === 'donation' && Number.isSafeInteger(t.amount_cents)) {
     if (showBadge) { queue.push(t.amount_cents); pumpBadge(); }
     if (realCents !== null) {
-      setTotal(realCents + t.amount_cents, true);   // roulette d'essai, annulée après 6 s
+      testExtra += t.amount_cents;
+      setTotal(realCents + testExtra);              // roulette d'essai, annulée 6 s après le dernier
       clearTimeout(testTimer);
-      testTimer = setTimeout(() => setTotal(realCents), 6000);
+      testTimer = setTimeout(() => { endTest(); setTotal(realCents); }, 6000);
     }
   }
 }
@@ -637,17 +706,25 @@ function connect() {
     if (msg.test) return handleTest(msg.test);
     if (msg.style) applyStyle(msg.style);       // first message, then each change made in Lumea
     if (!('status' in msg)) return;             // a style alone carries no total
-    if (msg.currency && !styleCurrency) setCurrency(msg.currency, 1);
+    if (msg.currency) {
+      campaignCurrency = msg.currency;
+      if (!styleCurrency && setCurrency(msg.currency, 1)) repaintAll();
+    }
     const fresh = (msg.new_donations || []).filter((d) => !seenBadges.has(d.id));
     fresh.forEach((d) => seenBadges.add(d.id));
     if (scope === 'perso') {
-      if (msg.name) setTitle(msg.name);
+      if (msg.name && msg.name !== titleRaw) setTitle(msg.name);
       if (Number.isSafeInteger(msg.team_total_cents)) {
-        teamEl.textContent = 'ÉQUIPE ' + money.format(msg.team_total_cents / 100 / taux);
+        teamCents = msg.team_total_cents;
+        teamEl.textContent = 'ÉQUIPE ' + fmt(teamCents);
       }
     }
-    if (Number.isSafeInteger(msg.total_cents)) realCents = msg.total_cents;
-    setTotal(msg.total_cents, fresh.length > 0);
+    if (Number.isSafeInteger(msg.total_cents)) {
+      // Un vrai changement met fin à l'essai en cours ; un total inchangé le laisse finir.
+      if (msg.total_cents !== realCents) endTest();
+      realCents = msg.total_cents;
+      if (testTimer === null) setTotal(realCents);
+    }
     const flashes = (msg.milestones || []).filter((m) => !seenMilestones.has(m.id));
     flashes.forEach((m) => seenMilestones.add(m.id));
     if (flashes.length > 0) flashPalier(flashes[0].color);
